@@ -11,9 +11,11 @@ int main(int argc, char** argv){
     if(file == NULL){
         return 1;
     }
+    int opt;
     int* flags = (int*)calloc(6, sizeof(int));
-    for(int i = 2; i < argc; i++){
-        switch(argv[i][1]){
+    optind = 2;
+    while((opt = getopt(argc, argv, "AbeEnstTuv")) != -1){
+        switch(opt){
             case 'A':
                 flags[1] = 1;
                 flags[4] = 1;
@@ -49,10 +51,12 @@ int main(int argc, char** argv){
                 break;
         }
     }
+   
     for(int i = 0; i < 6; i++){
         printf("%d\t", flags[i]);
     }
     printf("\n");
+    fclose(file);
     free(flags);
     return 0;
 }
