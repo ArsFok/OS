@@ -3,7 +3,7 @@
 all: mycat
 
 main.o: main.c
-	gcc -c main.c -Wall -Wextra -o main.o
+	gcc -g -c main.c -Wall -Wextra -o main.o
 
 mycat: main.o
 	gcc main.o -Wall -Wextra -o mycat
