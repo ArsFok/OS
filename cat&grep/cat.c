@@ -49,6 +49,7 @@ int main(int argc, char** argv){
                 break;
             case 'b': //num
                 flags[0] = 1;
+                flags[2] = 1;
                 break;
             case 'e':
                 flags[1] = 1;
@@ -89,6 +90,7 @@ int main(int argc, char** argv){
     FILE *file = fopen(filename, "r");
     if(!file){
         fprintf(stderr, "Error opening the file.\n");
+        fclose(file);
         exit(EXIT_FAILURE);
     }
     char buffer[MAX_LINE_LENGTH + 1];
@@ -115,10 +117,6 @@ int main(int argc, char** argv){
                         flags[2],
                         flags[5]);
         line_number++;
-    }
-    printf("\n");
-    for(int i = 0; i < 6; i++){
-        printf("%d\t", flags[i]);
     }
     printf("\n");
     fclose(file);

@@ -1,13 +1,20 @@
 .PHONY: all clean 
 
-all: mycat
+all: mycat mygrep
 
-main.o: main.c
-	gcc -g -c main.c -Wall -Wextra -o main.o
+cat.o: cat.c grep.c
+	gcc -g -c cat.c -Wall -Wextra -o cat.o
 
-mycat: main.o
-	gcc main.o -Wall -Wextra -o mycat
+grep.o: grep.c
+	gcc -g -c grep.c -Wall -Wextra -o grep.o
+
+mycat: cat.o
+	gcc cat.o -Wall -Wextra -o mycat
+	rm *.o
+
+mygrep: grep.o
+	gcc grep.o -Wall -Wextra -o mygrep
 	rm *.o
 
 clean: 
-	rm -f *.o mycat
+	rm -f *.o mycat mygrep
