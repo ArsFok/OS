@@ -55,6 +55,6 @@ dkms.conf
 *.dwo
 
 
-main_*.c
+*_*.c
 *.txt
 my*

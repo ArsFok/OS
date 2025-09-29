@@ -12,8 +12,32 @@
 #include <time.h>
 
 void print_permissions(mode_t mode) {
+    switch (mode & S_IFMT) {
+        case S_IFDIR:
+            printf("d");
+            break;
+        case S_IFLNK:
+            printf("l");
+            break;
+        case S_IFSOCK:
+            printf("s");
+            break;
+        case S_IFIFO:
+            printf("p");
+            break;
+        case S_IFBLK:
+            printf("b");
+            break;
+        case S_IFCHR:
+            printf("c");
+            break;
+        default:
+            printf("-");
+            break;
+    }
+
     printf(
-        "-%c%c%c%c%c%c%c%c%c",
+        "%c%c%c%c%c%c%c%c%c",
 
         ((mode & S_IRUSR) ? 'r' : '-'),
         ((mode & S_IWUSR) ? 'w' : '-'),
@@ -50,6 +74,7 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
     struct group *gent;
     time_t mtime;
     char fullpath[PATH_MAX];
+    char link_target[PATH_MAX];
     long total_blocks = 0;
 
     if(!(dirp = opendir(dirname))){
@@ -74,18 +99,18 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
         if(!show_hidden && dp->d_name[0] == '.') continue;
 
         snprintf(fullpath, PATH_MAX, "%s/%s", dirname, dp->d_name);
-        if(stat(dp->d_name, &stbuf) < 0){
-            fprintf(stderr, "Error getting file statistics.\n");
+        if(lstat(fullpath, &stbuf) < 0){
+            fprintf(stderr, "Error getting file statistics.%s\n", fullpath);
             continue;
         }
         if(long_format){
             print_permissions(stbuf.st_mode);
-            printf(" %lu ", (unsigned long)stbuf.st_nlink);
+            printf(" %3lu ", (unsigned long)stbuf.st_nlink);
 
             pwent = getpwuid(stbuf.st_uid);
             gent = getgrgid(stbuf.st_gid);
-            printf("%s %s ", pwent->pw_name, gent->gr_name);
-            printf(" %5ld ", (long)stbuf.st_size);
+            printf("%5s %5s ", pwent ? pwent->pw_name : "?", gent ? gent->gr_name : "?");
+            printf(" %8ld ", (long)stbuf.st_size);
 
             mtime = stbuf.st_mtim.tv_sec;
             struct tm *timeinfo = localtime(&mtime);
@@ -97,7 +122,13 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
                     printf(" \033[34m%s\033[0m\n", dp->d_name);
                     break;
                 case S_IFLNK:
-                    printf(" \033[35m%s\033[0m\n", dp->d_name);
+                    ssize_t len = readlink(fullpath, link_target, sizeof(link_target) - 1);
+                    if (len != -1) {
+                        link_target[len] = '\0';
+                        printf(" \033[35m%s -> %s\033[0m\n", dp->d_name, link_target);
+                    } else {
+                        printf(" \033[35m%s\033[0m\n", dp->d_name);
+                    }
                     break;
                 case S_IFSOCK:
                     printf(" \033[31m%s\033[0m\n", dp->d_name);
