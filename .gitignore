@@ -56,5 +56,5 @@ dkms.conf
 
 
 main_*.c
-
 *.txt
+my*
