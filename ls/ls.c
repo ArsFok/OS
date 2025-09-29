@@ -144,13 +144,13 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
         }else{
             switch (stbuf.st_mode & S_IFMT) {
                 case S_IFDIR:
-                    printf("\033[34m%s\033[0m", dp->d_name);
+                    printf("\033[34m%s\033[0m ", dp->d_name);
                     break;
                 case S_IFLNK:
-                    printf("\033[35m%s\033[0m", dp->d_name);
+                    printf("\033[35m%s\033[0m ", dp->d_name);
                     break;
                 case S_IFSOCK:
-                    printf("\033[31m%s\033[0m", dp->d_name);
+                    printf("\033[31m%s\033[0m ", dp->d_name);
                     break;
                 default:
                     if (is_executable(dp->d_name, stbuf.st_mode)) {
