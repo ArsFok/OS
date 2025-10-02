@@ -10,6 +10,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+#include <limits.h>
 
 void print_permissions(mode_t mode) {
     switch (mode & S_IFMT) {
@@ -76,6 +77,7 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
     char fullpath[PATH_MAX];
     char link_target[PATH_MAX];
     long total_blocks = 0;
+    ssize_t len;
 
     if(!(dirp = opendir(dirname))){
         fprintf(stderr, "Error opening the mkdir:.%s\n", dirname);
@@ -109,20 +111,26 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
 
             pwent = getpwuid(stbuf.st_uid);
             gent = getgrgid(stbuf.st_gid);
-            printf("%5s %5s ", pwent ? pwent->pw_name : "?", gent ? gent->gr_name : "?");
+            printf("%5s%5s ", pwent ? pwent->pw_name : (int)stbuf.st_uid, gent ? gent->gr_name : (int)stbuf.st_gid);
             printf(" %8ld ", (long)stbuf.st_size);
 
             mtime = stbuf.st_mtim.tv_sec;
             struct tm *timeinfo = localtime(&mtime);
+            time_t current_time = time(NULL);
+
             char timestring[30];
-            strftime(timestring, sizeof(timestring), "%b %d %H:%M", timeinfo);
+            if(difftime(current_time, mtime) > 15778800){
+                strftime(timestring, sizeof(timestring), "%b %d  %Y", timeinfo);
+            }else{
+                strftime(timestring, sizeof(timestring), "%b %d %H:%M", timeinfo);
+            }
             printf(" %s", timestring);
             switch (stbuf.st_mode & S_IFMT) {
                 case S_IFDIR:
                     printf(" \033[34m%s\033[0m\n", dp->d_name);
                     break;
                 case S_IFLNK:
-                    ssize_t len = readlink(fullpath, link_target, sizeof(link_target) - 1);
+                    len = readlink(fullpath, link_target, sizeof(link_target) - 1);
                     if (len != -1) {
                         link_target[len] = '\0';
                         printf(" \033[35m%s -> %s\033[0m\n", dp->d_name, link_target);
@@ -144,19 +152,19 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
         }else{
             switch (stbuf.st_mode & S_IFMT) {
                 case S_IFDIR:
-                    printf("\033[34m%s\033[0m ", dp->d_name);
+                    printf("\033[34m%-2s\033[0m ", dp->d_name);
                     break;
                 case S_IFLNK:
-                    printf("\033[35m%s\033[0m ", dp->d_name);
+                    printf("\033[35m%-2s\033[0m ", dp->d_name);
                     break;
                 case S_IFSOCK:
-                    printf("\033[31m%s\033[0m ", dp->d_name);
+                    printf("\033[31m%-2s\033[0m ", dp->d_name);
                     break;
                 default:
                     if (is_executable(dp->d_name, stbuf.st_mode)) {
-                        printf("\033[32m%s\033[0m ", dp->d_name);
+                        printf("\033[32m%-2s\033[0m ", dp->d_name);
                     } else {
-                        printf("%s ", dp->d_name);
+                        printf("%-2s ", dp->d_name);
                     }
                     break;
             }
