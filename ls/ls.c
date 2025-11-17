@@ -12,6 +12,12 @@
 #include <time.h>
 #include <limits.h>
 
+int compare_names(const void *a, const void *b) {
+    const struct dirent *da = *(const struct dirent **)a;
+    const struct dirent *db = *(const struct dirent **)b;
+    return strcasecmp(da->d_name, db->d_name);
+}
+
 void print_permissions(mode_t mode) {
     switch (mode & S_IFMT) {
         case S_IFDIR:
@@ -53,6 +59,7 @@ void print_permissions(mode_t mode) {
         ((mode & S_IXOTH) ? 'x' : '-')
     );
 }
+
 bool is_executable(const char* filename, mode_t mode) {
     if((mode & S_IFMT) != S_IFREG) return false;
 
@@ -79,40 +86,135 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
     long total_blocks = 0;
     ssize_t len;
 
+    struct dirent **entries = NULL;
+    int count = 0;
+    int capacity = 100;
+
+    size_t max_links = 0;
+    size_t max_user = 0;
+    size_t max_group = 0;
+    size_t max_size = 0;
+
     if(!(dirp = opendir(dirname))){
-        fprintf(stderr, "Error opening the mkdir:.%s\n", dirname);
+        fprintf(stderr, "Error opening the directory: %s\n", dirname);
         exit(EXIT_FAILURE);
     }
-    if(long_format){
-        while((dp = readdir(dirp)) != NULL){
-            if(!show_hidden && dp->d_name[0] == '.') continue;
-            
-            snprintf(fullpath, PATH_MAX, "%s/%s", dirname, dp->d_name);
-            if(stat(fullpath, &stbuf) < 0){
-                continue;
-            }
-            total_blocks += stbuf.st_blocks;
-        }
-        printf("total %ld\n", total_blocks / 2);
-        rewinddir(dirp);
+
+    entries = malloc(capacity * sizeof(struct dirent *));
+    if (!entries) {
+        fprintf(stderr, "Memory allocation failed\n");
+        closedir(dirp);
+        exit(EXIT_FAILURE);
     }
 
     while((dp = readdir(dirp)) != NULL){
         if(!show_hidden && dp->d_name[0] == '.') continue;
-
-        snprintf(fullpath, PATH_MAX, "%s/%s", dirname, dp->d_name);
-        if(lstat(fullpath, &stbuf) < 0){
-            fprintf(stderr, "Error getting file statistics.%s\n", fullpath);
+        
+        struct dirent *entry = malloc(sizeof(struct dirent));
+        if (!entry) {
+            fprintf(stderr, "Memory allocation failed\n");
             continue;
         }
+        memcpy(entry, dp, sizeof(struct dirent));
+        
+        if (count >= capacity) {
+            capacity *= 2;
+            struct dirent **new_entries = realloc(entries, capacity * sizeof(struct dirent *));
+            if (!new_entries) {
+                fprintf(stderr, "Memory reallocation failed\n");
+                free(entry);
+                break;
+            }
+            entries = new_entries;
+        }
+        
+        entries[count++] = entry;
+    }
+    closedir(dirp);
+
+    qsort(entries, count, sizeof(struct dirent *), compare_names);
+
+    if(long_format){
+        for(int i = 0; i < count; i++){
+            snprintf(fullpath, PATH_MAX, "%s/%s", dirname, entries[i]->d_name);
+            if(lstat(fullpath, &stbuf) < 0){
+                continue;
+            }
+            total_blocks += stbuf.st_blocks;
+
+            char links_str[20];
+            snprintf(links_str, sizeof(links_str), "%lu", (unsigned long)stbuf.st_nlink);
+            size_t links_len = strlen(links_str);
+            if (links_len > max_links) max_links = links_len;
+
+            pwent = getpwuid(stbuf.st_uid);
+            char uid_str[20];
+            const char *user_name;
+            if (pwent) {
+                user_name = pwent->pw_name;
+            } else {
+                snprintf(uid_str, sizeof(uid_str), "%u", stbuf.st_uid);
+                user_name = uid_str;
+            }
+            size_t user_len = strlen(user_name);
+            if (user_len > max_user) max_user = user_len;
+
+            gent = getgrgid(stbuf.st_gid);
+            char gid_str[20];
+            const char *group_name;
+            if (gent) {
+                group_name = gent->gr_name;
+            } else {
+                snprintf(gid_str, sizeof(gid_str), "%u", stbuf.st_gid);
+                group_name = gid_str;
+            }
+            size_t group_len = strlen(group_name);
+            if (group_len > max_group) max_group = group_len;
+
+            char size_str[20];
+            snprintf(size_str, sizeof(size_str), "%ld", (long)stbuf.st_size);
+            size_t size_len = strlen(size_str);
+            if (size_len > max_size) max_size = size_len;
+        }
+        printf("total %ld\n", total_blocks / 2);
+    }
+
+    for(int i = 0; i < count; i++){
+        dp = entries[i];
+        snprintf(fullpath, PATH_MAX, "%s/%s", dirname, dp->d_name);
+        if(lstat(fullpath, &stbuf) < 0){
+            fprintf(stderr, "Error getting file statistics: %s\n", fullpath);
+            continue;
+        }
+        
         if(long_format){
             print_permissions(stbuf.st_mode);
-            printf(" %3lu ", (unsigned long)stbuf.st_nlink);
+            printf(" ");
+
+            printf("%*lu ", (int)max_links, (unsigned long)stbuf.st_nlink);
 
             pwent = getpwuid(stbuf.st_uid);
             gent = getgrgid(stbuf.st_gid);
-            printf("%5s%5s ", pwent ? pwent->pw_name : (int)stbuf.st_uid, gent ? gent->gr_name : (int)stbuf.st_gid);
-            printf(" %8ld ", (long)stbuf.st_size);
+            
+            char uid_str[20], gid_str[20];
+            const char *user_name, *group_name;
+
+            if (pwent) {
+                user_name = pwent->pw_name;
+            } else {
+                snprintf(uid_str, sizeof(uid_str), "%u", stbuf.st_uid);
+                user_name = uid_str;
+            }
+
+            if (gent) {
+                group_name = gent->gr_name;
+            } else {
+                snprintf(gid_str, sizeof(gid_str), "%u", stbuf.st_gid);
+                group_name = gid_str;
+            }
+            
+            printf("%-*s %-*s", (int)max_user, user_name, (int)max_group, group_name);
+            printf(" %*ld ", (int)max_size, (long)stbuf.st_size);
 
             mtime = stbuf.st_mtim.tv_sec;
             struct tm *timeinfo = localtime(&mtime);
@@ -133,9 +235,9 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
                     len = readlink(fullpath, link_target, sizeof(link_target) - 1);
                     if (len != -1) {
                         link_target[len] = '\0';
-                        printf(" \033[35m%s -> %s\033[0m\n", dp->d_name, link_target);
+                        printf(" \033[36m%s\033[0m -> \033[34m%s\033[0m\n", dp->d_name, link_target);
                     } else {
-                        printf(" \033[35m%s\033[0m\n", dp->d_name);
+                        printf(" \033[36m%s\033[0m\n", dp->d_name);
                     }
                     break;
                 case S_IFSOCK:
@@ -155,7 +257,7 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
                     printf("\033[34m%-2s\033[0m ", dp->d_name);
                     break;
                 case S_IFLNK:
-                    printf("\033[35m%-2s\033[0m ", dp->d_name);
+                    printf("\033[36m%-2s\033[0m ", dp->d_name);
                     break;
                 case S_IFSOCK:
                     printf("\033[31m%-2s\033[0m ", dp->d_name);
@@ -169,8 +271,9 @@ void list_files(const char* dirname, bool show_hidden, bool long_format){
                     break;
             }
         }
+        free(entries[i]);
     }
-    closedir(dirp);
+    free(entries);
 }
 
 int main(int argc, char** argv){
